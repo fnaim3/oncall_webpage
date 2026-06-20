@@ -239,11 +239,11 @@ st.subheader("📅 Export to Calendar")
 if search_name:
     export_type = st.radio(
         "Export options:",
-        options=["All shown dates", "Only for searched person"],
+        options=["Others and me", "Only me"],
         horizontal=True
     )
 else:
-    export_type = "All shown dates"
+    export_type = "Others and me"
 
 def get_staff_location(row, name):
     columns = ['ward', 'nicu', 'scn', 'picu', 'passive', 'specialist', 'neonatologist', 'consultant']
