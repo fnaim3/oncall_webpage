@@ -12,22 +12,6 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(page_title="Paediatrics On-call Roster", layout="wide", page_icon="🏥")
 
-# ====================== MOBILE CSS ======================
-st.markdown("""
-<style>
-    .stExpander {
-        border: 1px solid #e0e0e0;
-        border-radius: 8px;
-        margin-bottom: 8px;
-    }
-    @media (max-width: 768px) {
-        .stButton button {
-            width: 100% !important;
-        }
-    }
-</style>
-""", unsafe_allow_html=True)
-
 st.title("🏥 Paediatrics On-call Roster")
 
 # ====================== AUTO MONTH DETECTION ======================
@@ -51,15 +35,16 @@ if not month_names:
     st.error("No data found in the database.")
     st.stop()
 
-# ====================== SIDEBAR (Month only) ======================
-st.sidebar.header("📅 Month")
-current_month = datetime.now().month
-current_year = datetime.now().year
-default_index = next((i for i, (m, y) in enumerate(month_keys) if m == current_month and y == current_year), len(month_names) - 1)
-
-selected_month_name = st.sidebar.selectbox("Select Month", month_names, index=default_index)
-selected_index = month_names.index(selected_month_name)
-selected_month, selected_year = month_keys[selected_index]
+# ====================== MONTH SELECTOR (Main Page) ======================
+col1, col2 = st.columns([1, 3])
+with col1:
+    current_month = datetime.now().month
+    current_year = datetime.now().year
+    default_index = next((i for i, (m, y) in enumerate(month_keys) if m == current_month and y == current_year), len(month_names) - 1)
+    
+    selected_month_name = st.selectbox("📅 Month", month_names, index=default_index)
+    selected_index = month_names.index(selected_month_name)
+    selected_month, selected_year = month_keys[selected_index]
 
 st.caption(f"Department of Paediatrics • Hospital Sultanah Bahiyah • {selected_month_name}")
 
@@ -77,7 +62,7 @@ def load_data(month, year):
 
 df = load_data(selected_month, selected_year)
 
-# ====================== FILTER SECTION (Main Page) ======================
+# ====================== SEARCH & FILTERS (Main Page) ======================
 with st.expander("🔍 Search & Filters", expanded=True):
     search_name = st.text_input("Search Staff Name", placeholder="e.g. Athirah, Tan KA, Eric", label_visibility="collapsed")
 
@@ -199,11 +184,9 @@ if search_name:
                     st.markdown(f"**Consultant:** {row['consultant']}")
                     st.markdown(f"**Neonatologist:** {row['neonatologist']}")
 
+        # Warning on main page
         if solo_shifts:
-            warning_text = "⚠️ You have solo on-call shifts on:\n"
-            for shift in solo_shifts:
-                warning_text += f"- {shift}\n"
-            st.sidebar.warning(warning_text)
+            st.warning("⚠️ You have solo on-call shifts on:\n" + "\n".join([f"- {s}" for s in solo_shifts]))
 
     else:
         st.warning(f"No on-call records found for **{search_name}** in {selected_month_name}.")
