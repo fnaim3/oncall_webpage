@@ -4,39 +4,57 @@ import pandas as pd
 from datetime import datetime, timedelta
 import uuid
 
-import streamlit as st
-
-# ====================== SUPABASE CONFIG (SECURE) ======================
+# ====================== SUPABASE CONFIG ======================
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+st.set_page_config(
+    page_title="Paediatrics On-call Roster",
+    layout="wide",
+    page_icon="🏥",
+    initial_sidebar_state="expanded"
+)
 
-st.set_page_config(page_title="Paediatrics On-call Roster", layout="wide", page_icon="🏥")
+# ====================== MOBILE-FRIENDLY CSS ======================
+st.markdown("""
+<style>
+    .stExpander {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        margin-bottom: 8px;
+    }
+    .team-row {
+        padding: 6px 0;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    .team-row:last-child {
+        border-bottom: none;
+    }
+    @media (max-width: 768px) {
+        .stButton button {
+            width: 100% !important;
+        }
+    }
+</style>
+""", unsafe_allow_html=True)
 
 st.title("🏥 Paediatrics On-call Roster")
 
-# ====================== AUTO FETCH AVAILABLE MONTHS ======================
+# ====================== AUTO MONTH DETECTION ======================
 @st.cache_data(ttl=300)
 def get_available_months():
     response = supabase.table("oncall_roster").select("month, year").execute()
     df = pd.DataFrame(response.data)
-    
     if df.empty:
         return [], []
-    
     months_df = df.drop_duplicates().sort_values(["year", "month"])
-    
-    month_names = []
-    month_keys = []
-    
+    month_names, month_keys = [], []
     for _, row in months_df.iterrows():
         month_name = datetime(row['year'], row['month'], 1).strftime("%B %Y")
         month_names.append(month_name)
         month_keys.append((row['month'], row['year']))
-    
     return month_names, month_keys
 
 month_names, month_keys = get_available_months()
@@ -50,14 +68,7 @@ st.sidebar.header("📅 Select Month")
 
 current_month = datetime.now().month
 current_year = datetime.now().year
-
-default_index = 0
-for i, (m, y) in enumerate(month_keys):
-    if m == current_month and y == current_year:
-        default_index = i
-        break
-else:
-    default_index = len(month_names) - 1
+default_index = next((i for i, (m, y) in enumerate(month_keys) if m == current_month and y == current_year), len(month_names) - 1)
 
 selected_month_name = st.sidebar.selectbox("Month", month_names, index=default_index)
 selected_index = month_names.index(selected_month_name)
@@ -68,14 +79,7 @@ st.caption(f"Department of Paediatrics • Hospital Sultanah Bahiyah • {select
 # ====================== LOAD DATA ======================
 @st.cache_data(ttl=300)
 def load_data(month, year):
-    response = (
-        supabase.table("oncall_roster")
-        .select("*")
-        .eq("month", month)
-        .eq("year", year)
-        .order("date")
-        .execute()
-    )
+    response = supabase.table("oncall_roster").select("*").eq("month", month).eq("year", year).order("date").execute()
     df = pd.DataFrame(response.data)
     if not df.empty:
         df['date'] = pd.to_datetime(df['date']).dt.date
@@ -102,7 +106,6 @@ if search_name:
     search_clean = search_name.strip().upper()
     
     if search_clean == "NA":
-        # Block search for "NA" silently (no message)
         filtered_df = filtered_df.iloc[0:0]
     else:
         search_lower = search_name.lower().strip()
