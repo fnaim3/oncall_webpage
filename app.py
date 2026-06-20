@@ -12,6 +12,22 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(page_title="Paediatrics On-call Roster", layout="wide", page_icon="🏥")
 
+# ====================== MOBILE CSS ======================
+st.markdown("""
+<style>
+    .stExpander {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        margin-bottom: 8px;
+    }
+    @media (max-width: 768px) {
+        .stButton button {
+            width: 100% !important;
+        }
+    }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("🏥 Paediatrics On-call Roster")
 
 # ====================== AUTO MONTH DETECTION ======================
@@ -32,10 +48,10 @@ def get_available_months():
 month_names, month_keys = get_available_months()
 
 if not month_names:
-    st.error("No data found.")
+    st.error("No data found in the database.")
     st.stop()
 
-# ====================== SIDEBAR (Only Month) ======================
+# ====================== SIDEBAR (Month only) ======================
 st.sidebar.header("📅 Month")
 current_month = datetime.now().month
 current_year = datetime.now().year
@@ -63,13 +79,7 @@ df = load_data(selected_month, selected_year)
 
 # ====================== FILTER SECTION (Main Page) ======================
 with st.expander("🔍 Search & Filters", expanded=True):
-    col1, col2 = st.columns([3, 1])
-    
-    with col1:
-        search_name = st.text_input("Search Staff Name", placeholder="e.g. Athirah, Tan KA, Eric", label_visibility="collapsed")
-    
-    with col2:
-        show_solo_only = st.checkbox("Show only solo shifts", value=False)
+    search_name = st.text_input("Search Staff Name", placeholder="e.g. Athirah, Tan KA, Eric", label_visibility="collapsed")
 
 # ====================== FILTER DATA ======================
 filtered_df = df.copy()
@@ -85,10 +95,11 @@ if search_name:
         filtered_df = filtered_df.iloc[0:0]
     else:
         search_lower = search_name.lower().strip()
-        def name_exists(val):
-            if pd.isna(val) or val == '':
+        def name_exists(cell_value):
+            if pd.isna(cell_value) or cell_value == '':
                 return False
-            return search_lower in [n.strip().lower() for n in str(val).split(',')]
+            names = [name.strip().lower() for name in str(cell_value).split(',')]
+            return search_lower in names
         mask = (
             filtered_df['ward'].apply(name_exists) |
             filtered_df['nicu'].apply(name_exists) |
@@ -101,69 +112,116 @@ if search_name:
         )
         filtered_df = filtered_df[mask]
 
-if show_solo_only:
-    # Simple solo detection (you can improve this logic later)
-    solo_mask = filtered_df.apply(
-        lambda row: all(
-            len([x.strip() for x in str(row.get(col, '')).split(',') if x.strip()]) <= 1 
-            for col in ['ward', 'nicu', 'scn', 'picu']
-        ), axis=1
-    )
-    filtered_df = filtered_df[solo_mask]
-
-# ====================== MAIN CONTENT ======================
-if search_name or show_solo_only:
+# ====================== MAIN VIEW ======================
+if search_name:
     if not filtered_df.empty:
-        st.subheader(f"Results ({len(filtered_df)} days)")
+        st.subheader(f"📋 {search_name}'s On-call Schedule ({selected_month_name})")
+
+        solo_shifts = []
 
         for _, row in filtered_df.iterrows():
-            section = next((col.upper() for col in ['ward','nicu','scn','picu','passive','specialist','neonatologist','consultant']
-                           if pd.notna(row[col]) and (search_name.lower() in str(row[col]).lower() if search_name else True)), None)
+            section = None
+            section_columns = ['ward', 'nicu', 'scn', 'picu', 'passive', 'specialist', 'neonatologist', 'consultant']
             
-            if not section:
+            for col in section_columns:
+                if pd.notna(row[col]) and search_name.lower() in str(row[col]).lower():
+                    section = col.upper()
+                    break
+
+            if section is None:
                 continue
 
-            date_str = row['date'].strftime('%d %b %Y (%a)')
-            title = f"{date_str} | {section}"
+            date_str = row['date'].strftime('%d %B %Y (%a)')
+
+            teammates_raw = row.get(section.lower(), "")
+            teammates_list = [t.strip() for t in str(teammates_raw).split(",") 
+                              if search_name.lower() not in t.lower()]
+            is_solo = len(teammates_list) == 0
+
+            if is_solo and section not in ["CONSULTANT", "NEONATOLOGIST", "SPECIALIST", "PASSIVE"]:
+                solo_shifts.append(f"{date_str} - {section}")
+
+            title_parts = [date_str]
+            if section in ["CONSULTANT", "NEONATOLOGIST"]:
+                if section == "CONSULTANT" and pd.notna(row['neonatologist']):
+                    title_parts.append(f"| Neonatologist: {row['neonatologist']}")
+                elif section == "NEONATOLOGIST" and pd.notna(row['consultant']):
+                    title_parts.append(f"| Consultant: {row['consultant']}")
+            else:
+                title_parts.append(f"| {section}")
+                if pd.notna(row['consultant']):
+                    title_parts.append(f"| Consultant: {row['consultant']}")
+                if pd.notna(row['neonatologist']):
+                    title_parts.append(f"| Neonatologist: {row['neonatologist']}")
+
+            expander_title = " ".join(title_parts)
 
             if section == "PASSIVE":
-                st.markdown(f"**🟣 {title}**")
+                st.markdown(
+                    f"""
+                    <div style="
+                        background-color: #f3e5f5; 
+                        border-left: 5px solid #9c27b0; 
+                        padding: 10px 14px; 
+                        border-radius: 6px; 
+                        margin-bottom: 10px;
+                    ">
+                        <b style="color:#4a148c; font-size:15px;">🟣 PASSIVE ON-CALL</b><br>
+                        <span style="color:#4a148c; font-size:15px;"><b>{expander_title}</b></span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
                 continue
 
-            with st.expander(title, expanded=False):
-                st.write(f"**Date:** {date_str}")
-                st.write(f"**Section:** {section}")
+            with st.expander(expander_title, expanded=False):
+                st.markdown(f"**Date:** {date_str}")
+                st.markdown(f"**Section:** {section}")
 
                 if section in ["CONSULTANT", "NEONATOLOGIST", "SPECIALIST"]:
                     def format_value(val):
                         if pd.isna(val) or val == '' or val == 'NA':
                             return '<span style="color:grey; font-style:italic;">not available</span>'
                         return val
+
                     st.markdown("**Team Composition:**")
-                    for c in ['specialist','ward','nicu','scn','picu','passive','consultant','neonatologist']:
-                        st.markdown(f"- **{c.title()}:** {format_value(row.get(c))}", unsafe_allow_html=True)
+                    st.markdown(f"- **Specialist:** {format_value(row.get('specialist'))}")
+                    st.markdown(f"- **Ward:** {format_value(row.get('ward'))}")
+                    st.markdown(f"- **NICU:** {format_value(row.get('nicu'))}")
+                    st.markdown(f"- **SCN:** {format_value(row.get('scn'))}")
+                    st.markdown(f"- **PICU:** {format_value(row.get('picu'))}")
+                    st.markdown(f"- **Passive:** {format_value(row.get('passive'))}")
+                    st.markdown(f"- **Consultant:** {format_value(row.get('consultant'))}")
+                    st.markdown(f"- **Neonatologist:** {format_value(row.get('neonatologist'))}")
                 else:
-                    teammates = [t.strip() for t in str(row.get(section.lower(), '')).split(',') if search_name.lower() not in t.lower()]
-                    st.write(f"**Teammates:** {', '.join(teammates) if teammates else '—'}")
-                    st.write(f"**Consultant:** {row.get('consultant', '—')}")
-                    st.write(f"**Neonatologist:** {row.get('neonatologist', '—')}")
+                    teammates_str = ", ".join(teammates_list) if teammates_list else "—"
+                    st.markdown(f"**Teammates in {section}:** {teammates_str}")
+                    st.markdown(f"**Consultant:** {row['consultant']}")
+                    st.markdown(f"**Neonatologist:** {row['neonatologist']}")
+
+        if solo_shifts:
+            warning_text = "⚠️ You have solo on-call shifts on:\n"
+            for shift in solo_shifts:
+                warning_text += f"- {shift}\n"
+            st.sidebar.warning(warning_text)
+
     else:
-        st.info("No matching records found.")
+        st.warning(f"No on-call records found for **{search_name}** in {selected_month_name}.")
+
 else:
-    # Default view - show full roster
     if not df.empty:
         display_df = df.copy()
-        display_df['date'] = pd.to_datetime(display_df['date']).dt.strftime('%d %b %Y')
+        display_df['date'] = pd.to_datetime(display_df['date']).dt.strftime('%d %B %Y')
         st.dataframe(display_df, use_container_width=True, hide_index=True)
     else:
-        st.info("No data available for this month.")
+        st.info(f"No data available for {selected_month_name}.")
 
-# ====================== CALENDAR EXPORT ======================
+# ====================== ONE-CLICK CALENDAR EXPORT ======================
 st.divider()
 st.subheader("📅 Export to Calendar")
 
 if st.download_button(
-    "📅 Export to Google Calendar / Apple Calendar",
+    label="📅 Export to Google Calendar / Apple Calendar",
     data="",
     file_name="oncall_calendar.ics",
     mime="text/calendar",
@@ -171,4 +229,4 @@ if st.download_button(
 ):
     st.success("Calendar export feature coming soon!")
 
-st.caption("Hospital Sultanah Bahiyah • Paediatrics Department")
+st.caption("Data source: Department of Paediatrics, Hospital Sultanah Bahiyah")
