@@ -236,13 +236,87 @@ else:
 st.divider()
 st.subheader("📅 Export to Calendar")
 
-if st.download_button(
-    label="📅 Export to Google Calendar / Apple Calendar",
-    data="",
-    file_name="oncall_calendar.ics",
-    mime="text/calendar",
-    use_container_width=True
-):
-    st.success("Calendar export feature coming soon!")
+if search_name:
+    export_type = st.radio(
+        "Export options:",
+        options=["All shown dates", "Only for searched person"],
+        horizontal=True
+    )
+else:
+    export_type = "All shown dates"
+
+def get_staff_location(row, name):
+    columns = ['ward', 'nicu', 'scn', 'picu', 'passive', 'specialist', 'neonatologist', 'consultant']
+    name_lower = name.lower()
+    for col in columns:
+        if pd.notna(row[col]) and name_lower in str(row[col]).lower():
+            if col in ['consultant', 'neonatologist']:
+                return None
+            return col.upper()
+    return None
+
+def generate_ics(dataframe, search_name=None):
+    ics_content = "BEGIN:VCALENDAR\n"
+    ics_content += "VERSION:2.0\n"
+    ics_content += "PRODID:-//Hospital Sultanah Bahiyah//Paediatrics On-call//EN\n"
+    ics_content += "CALSCALE:GREGORIAN\n"
+    ics_content += "METHOD:PUBLISH\n"
+
+    for _, row in dataframe.iterrows():
+        event_date = row['date']
+        start = datetime.combine(event_date, datetime.min.time())
+        end = start + timedelta(days=1)
+        uid = str(uuid.uuid4())
+
+        if search_name:
+            location = get_staff_location(row, search_name)
+            if location:
+                summary = f"{search_name} - Oncall - {location}"
+            else:
+                summary = f"{search_name} - Oncall"
+        else:
+            summary = f"On-call Roster ({row['day_name']})"
+
+        description = (
+            f"Ward: {row['ward']}\\n"
+            f"NICU: {row['nicu']}\\n"
+            f"SCN: {row['scn']}\\n"
+            f"PICU: {row['picu']}\\n"
+            f"Passive: {row['passive']}\\n"
+            f"Specialist: {row['specialist']}\\n"
+            f"Neonatologist: {row['neonatologist']}\\n"
+            f"Consultant: {row['consultant']}"
+        )
+
+        ics_content += "BEGIN:VEVENT\n"
+        ics_content += f"UID:{uid}\n"
+        ics_content += f"DTSTART;VALUE=DATE:{start.strftime('%Y%m%d')}\n"
+        ics_content += f"DTEND;VALUE=DATE:{end.strftime('%Y%m%d')}\n"
+        ics_content += f"SUMMARY:{summary}\n"
+        ics_content += f"DESCRIPTION:{description}\n"
+        ics_content += "STATUS:CONFIRMED\n"
+        ics_content += "TRANSP:TRANSPARENT\n"
+        ics_content += "END:VEVENT\n"
+
+    ics_content += "END:VCALENDAR"
+    return ics_content
+
+# Two-step export (better for iPhone Safari)
+if st.button("📅 Generate Calendar File (.ics)", use_container_width=True):
+    if filtered_df.empty:
+        st.warning("No data available to export.")
+    else:
+        if export_type == "Only for searched person" and search_name:
+            ics_data = generate_ics(filtered_df, search_name=search_name)
+        else:
+            ics_data = generate_ics(filtered_df)
+
+        st.download_button(
+            label="⬇️ Download .ics File",
+            data=ics_data,
+            file_name=f"{search_name or 'oncall'}_{selected_month_name.replace(' ', '_')}.ics",
+            mime="text/calendar",
+            use_container_width=True
+        )
 
 st.caption("Data source: Department of Paediatrics, Hospital Sultanah Bahiyah")
