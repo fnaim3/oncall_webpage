@@ -10,7 +10,7 @@ SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-st.set_page_config(page_title="Paediatrics On-call Roster", layout="wide", page_icon="🏥")
+st.set_page_config(page_title="HSB Paeds MO Oncall", layout="wide")
 
 # ====================== MOBILE CSS ======================
 st.markdown("""
@@ -28,7 +28,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🏥 Paediatrics On-call Roster")
+st.title("HSB Paeds MO Oncall Schedule 📅")
 
 # ====================== AUTO MONTH DETECTION ======================
 @st.cache_data(ttl=300)
@@ -138,7 +138,7 @@ if search_name:
 
 # ====================== WARNING (Right below filter box) ======================
 if solo_shifts:
-    st.warning("⚠️ You have solo on-call shifts on:\n" + "\n".join([f"- {s}" for s in solo_shifts]))
+    st.warning("⚠️ Solo section on this date:\n" + "\n".join([f"- {s}" for s in solo_shifts]))
 
 # ====================== MAIN VIEW ======================
 if search_name:
@@ -200,26 +200,20 @@ if search_name:
                 st.markdown(f"**Date:** {date_str}")
                 st.markdown(f"**Section:** {section}")
 
-                if section in ["CONSULTANT", "NEONATOLOGIST", "SPECIALIST"]:
-                    def format_value(val):
-                        if pd.isna(val) or val == '' or val == 'NA':
-                            return '<span style="color:grey; font-style:italic;">not available</span>'
-                        return val
+                def format_value(val):
+                    if pd.isna(val) or val == '' or val == 'NA':
+                        return '<span style="color:grey; font-style:italic;">not available</span>'
+                    return val
 
-                    st.markdown("**Team Composition:**")
-                    st.markdown(f"- **Specialist:** {format_value(row.get('specialist'))}")
-                    st.markdown(f"- **Ward:** {format_value(row.get('ward'))}")
-                    st.markdown(f"- **NICU:** {format_value(row.get('nicu'))}")
-                    st.markdown(f"- **SCN:** {format_value(row.get('scn'))}")
-                    st.markdown(f"- **PICU:** {format_value(row.get('picu'))}")
-                    st.markdown(f"- **Passive:** {format_value(row.get('passive'))}")
-                    st.markdown(f"- **Consultant:** {format_value(row.get('consultant'))}")
-                    st.markdown(f"- **Neonatologist:** {format_value(row.get('neonatologist'))}")
-                else:
-                    teammates_str = ", ".join(teammates_list) if teammates_list else "—"
-                    st.markdown(f"**Teammates in {section}:** {teammates_str}")
-                    st.markdown(f"**Consultant:** {row['consultant']}")
-                    st.markdown(f"**Neonatologist:** {row['neonatologist']}")
+                st.markdown("**Team Composition:**")
+                st.markdown(f"- **Specialist:** {format_value(row.get('specialist'))}")
+                st.markdown(f"- **Ward:** {format_value(row.get('ward'))}")
+                st.markdown(f"- **NICU:** {format_value(row.get('nicu'))}")
+                st.markdown(f"- **SCN:** {format_value(row.get('scn'))}")
+                st.markdown(f"- **PICU:** {format_value(row.get('picu'))}")
+                st.markdown(f"- **Passive:** {format_value(row.get('passive'))}")
+                st.markdown(f"- **Consultant:** {format_value(row.get('consultant'))}")
+                st.markdown(f"- **Neonatologist:** {format_value(row.get('neonatologist'))}")
 
     else:
         st.warning(f"No on-call records found for **{search_name}** in {selected_month_name}.")
